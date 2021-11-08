@@ -55,7 +55,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class AvroSchemagenPlugin extends Plugin {
 	public static final String PLUGIN_NAME = "XavroSchemagen";
-	private static final String OUTPUT_DIRECTORY = "avroSchemas";
+	private static final String OUTPUT_DIRECTORY_ORDERED = "avro-schemas-ordered";
+	private static final String OUTPUT_DIRECTORY = "avro-schemas";
 	protected static ObjectMapper mapper = new ObjectMapper();
 	private SchemagenHelper helper;
 
@@ -72,7 +73,7 @@ public class AvroSchemagenPlugin extends Plugin {
 	 * @return the schema directory, relative to the base output directory
 	 */
 	public static File getSchemaDirectory(File outputDirectory) {
-		return new File(outputDirectory.getAbsoluteFile() + File.separator + OUTPUT_DIRECTORY);
+		return new File(outputDirectory.getAbsoluteFile() + File.separator + OUTPUT_DIRECTORY_ORDERED);
 	}
 
 	/*
@@ -83,8 +84,8 @@ public class AvroSchemagenPlugin extends Plugin {
 		helper = new SchemagenHelper(outline);
 
 		// set up special schemas
-		helper.getSpecialSchemas().put(ReferenceAvroType.class, new HashSet<String>());
-		helper.getSpecialSchemas().put(DateAvroType.class, new HashSet<String>());
+		helper.getSpecialSchemas().put(ReferenceAvroType.class, new HashSet<>());
+		helper.getSpecialSchemas().put(DateAvroType.class, new HashSet<>());
 
 		// do the work
 		inferAvroSchema(outline);	
@@ -98,7 +99,7 @@ public class AvroSchemagenPlugin extends Plugin {
 	 */
 	private void inferAvroSchema(Outline outline) {
 		Model model = outline.getModel();
-		Set<NamedAvroType> avroTypes = new HashSet<NamedAvroType>();
+		Set<NamedAvroType> avroTypes = new HashSet<>();
 
 		// enums
 		for (Map.Entry<NClass, CEnumLeafInfo> entry : model.enums().entrySet()) {
@@ -114,7 +115,6 @@ public class AvroSchemagenPlugin extends Plugin {
 			avroTypes.add(type);
 		}
 		
-		
 		// grab a package context, write the schemas
 		PackageOutline aPackage = outline.getAllPackageContexts().iterator().next();
 		JPackage rootPackage = aPackage._package().owner().rootPackage();
@@ -129,8 +129,10 @@ public class AvroSchemagenPlugin extends Plugin {
 		and debug summary information.
 	 */
 	private void generateAvroSchemas(JPackage rootPackage, Set<NamedAvroType> avroTypes) {
-		JPackage avroPackage = rootPackage.subPackage("avroSchemas");
-		System.out.println("Writing schemas under package '"+ avroPackage.name() +"'");
+		JPackage avroPackageOrdered = rootPackage.subPackage(OUTPUT_DIRECTORY_ORDERED);
+		JPackage avroPackage = rootPackage.subPackage(OUTPUT_DIRECTORY);
+		System.out.println("Writing schemas under packages: " + avroPackageOrdered.name()
+				+ ", " + avroPackageOrdered.name());
 
 		// check for name collisions
 		checkForCollisions(avroTypes);
@@ -148,10 +150,10 @@ public class AvroSchemagenPlugin extends Plugin {
 		}
 
 		// output in an ordered way
-		outputSchema(avroPackage, orderedTypes);
+		outputSchema(avroPackageOrdered, avroPackage, orderedTypes);
 
 		// output debug summary
-		JTextFile avroSchema = new JTextFile("avroSchemas.txt");
+		JTextFile avroSchema = new JTextFile("avro-schemas.avsc");
 		StringBuilder sb = new StringBuilder();
 
 		for (NamedAvroType type : orderedTypes) {
@@ -168,16 +170,19 @@ public class AvroSchemagenPlugin extends Plugin {
 	 * TODO can be made more specific by checking names per namespace rather than globally.
 	 */
 	private void checkForCollisions(Set<NamedAvroType> types) {
-		Set<String> names = new HashSet<String>();
+		Set<String> names = new HashSet<>();
 
-		for (NamedAvroType type : types) {
+		for (Iterator<NamedAvroType> it = types.iterator(); it.hasNext();) {
+			NamedAvroType type = it.next();
 			String name = type.name;
 
 			if (names.contains(name)) {
-				throw new SchemagenException("Duplicate type names found under '" + name + "'!");
+				System.out.println("Duplicate type names found under '" + name);
+				it.remove();
+				//throw new SchemagenException("Duplicate type names found under '" + name + "'!");
+			} else {
+				names.add(name);
 			}
-
-			names.add(name);
 		}
 	}
 
@@ -189,7 +194,7 @@ public class AvroSchemagenPlugin extends Plugin {
 		TODO Though circular references shouldn't be possible, it might be good to check.
 	 */
 	private List<NamedAvroType> topologicalSort(Set<NamedAvroType> types) {
-		Map<String, Node> nodesByName = new HashMap<String, Node>();
+		Map<String, Node> nodesByName = new HashMap<>();
 
 		for (NamedAvroType type : types) {
 			String typeName = type.namespace + "." + type.name;
@@ -221,11 +226,11 @@ public class AvroSchemagenPlugin extends Plugin {
 		}
 
 		// turn into an ordered list
-		Set<Node> allNodes = new HashSet<Node>(nodesByName.values());
-		List<NamedAvroType> sequence = new ArrayList<NamedAvroType>();
+		Set<Node> allNodes = new HashSet<>(nodesByName.values());
+		List<NamedAvroType> sequence = new ArrayList<>();
 
 		while (!allNodes.isEmpty()) {
-			Set<Node> removals = new HashSet<Node>();
+			Set<Node> removals = new HashSet<>();
 			
 			for (Node node : allNodes) {
 				if (node.parents.isEmpty()) {
@@ -249,7 +254,7 @@ public class AvroSchemagenPlugin extends Plugin {
 		Write the actual schema files. Uses a counter to keep files ordered on the filesystem,
 		using 0 prefixes where necessary to guarantee ordering.
 	 */
-	private void outputSchema(JPackage avroPackage, List<NamedAvroType> types) {
+	private void outputSchema(JPackage avroPackageOrdered, JPackage avroPackage, List<NamedAvroType> types) {
 		// set up the correct format for leading zeros (ensures proper order in filesystem)
 		StringBuilder digits = new StringBuilder();
 		for (int i=0; i < Integer.toString(types.size()).length(); ++i) {
@@ -261,12 +266,17 @@ public class AvroSchemagenPlugin extends Plugin {
 
 		for (NamedAvroType type : types) {
 			String id = format.format(counter.getAndIncrement());
-			JTextFile avroSchema = new JTextFile("avroSchema-"+ id +"_"+ type.name +".txt");
-			avroSchema.setContents(getJson(type));
-			avroPackage.addResourceFile(avroSchema);
+			String jsonValue = getJson(type);
+
+			JTextFile avroSchemaWithId = new JTextFile(id + "_"+ type.name + ".avsc");
+			avroSchemaWithId.setContents(jsonValue);
+			avroPackageOrdered.addResourceFile(avroSchemaWithId);
+
+			JTextFile avroSchema = new JTextFile(type.name + ".avsc");
+			avroSchema.setContents(jsonValue);
+			avroPackage.subPackage(type.namespace.replace(".", "/")).addResourceFile(avroSchema);
 		}
 	}
-
 
 	/**
 	 * Use the Jackson mapper to create a JSON string from an Avro schema object.
@@ -276,19 +286,23 @@ public class AvroSchemagenPlugin extends Plugin {
 	 */
 	private String getJson(AvroType type) {
 		try {
-			return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(type);
+			return replaceValues(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(type));
 		} catch (Exception ex) {
 			throw new SchemagenException(ex);
 		}
 	}
 
+	private String replaceValues(String value) {
+		return value.replace("\"[]\"", "[]")
+				.replace("\"default\" : \"null\"", "\"default\" : null");
+	}
 	/**
 	 * Node class supporting Avro types. Used for dependency sorting.
 	 */
 	private static class Node {
 		NamedAvroType type;
-		final Set<Node> parents = new HashSet<Node>();
-		final Set<Node> children = new HashSet<Node>();
+		final Set<Node> parents = new HashSet<>();
+		final Set<Node> children = new HashSet<>();
 		
 		Node(NamedAvroType type) {
 			this.type = type;

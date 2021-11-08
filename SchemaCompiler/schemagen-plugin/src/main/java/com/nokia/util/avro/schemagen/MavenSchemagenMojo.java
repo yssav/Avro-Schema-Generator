@@ -191,6 +191,9 @@ public class MavenSchemagenMojo extends AbstractMojo {
 		// use our plugin
 		args.add("-"+AvroSchemagenPlugin.PLUGIN_NAME);
 
+		// allow vendor extensions
+		args.add("-extension");
+
 		// output directory
 		args.add("-d");
 		args.add(outputDirectory.toString());

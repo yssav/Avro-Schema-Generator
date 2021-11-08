@@ -27,6 +27,7 @@ import com.sun.tools.xjc.outline.Outline;
 import com.sun.xml.xsom.*;
 
 import javax.xml.datatype.XMLGregorianCalendar;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.*;
 
@@ -35,9 +36,9 @@ import java.util.*;
  * @version 10-31-2012
  */
 public class SchemagenHelper {
-	private static final String PARENT_FIELD = "_parent";    // name of parent field for type hierarchies
+	private static final String PARENT_FIELD = "parent";    // name of parent field for type hierarchies
 	private final Outline theOutline;
-	private final Map<Class, Set<String>> specialSchemas = new HashMap<Class, Set<String>>(); // a list of special schemas to consider
+	private final Map<Class, Set<String>> specialSchemas = new HashMap<>(); // a list of special schemas to consider
 
 
 	public SchemagenHelper(Outline outline) {
@@ -55,7 +56,7 @@ public class SchemagenHelper {
 		taken directly from the names of the constants.
 	 */
 	public NamedAvroType avroFromEnum(CEnumLeafInfo info) {
-		List<String> constants = new ArrayList<String>();
+		List<String> constants = new ArrayList<>();
 
 		for (CEnumConstant constant : info.getConstants()) {
 			constants.add(constant.getName());
@@ -84,11 +85,11 @@ public class SchemagenHelper {
 		// super class reference (also as a field)
 		CClassInfo parent = info.getBaseClass();
 		if (parent != null) {
-			String name = makePackageName(parent.getOwnerPackage()) + "." + parent.getSqueezedName();
-			record.addField(PARENT_FIELD, new DummyAvroType(name), null);
+			String name = makePackageName(parent.getOwnerPackage()) + "." + parent.shortName;
+			//record.addField(PARENT_FIELD, new DummyAvroType(name), null);
 		}
 
-		record.name = info.getSqueezedName();
+		record.name = info.shortName;
 		record.namespace = makePackageName(info.getOwnerPackage());
 		return record;
 	}
@@ -99,7 +100,7 @@ public class SchemagenHelper {
 	private AvroType avroFromProperty(CPropertyInfo info, JPackage _package) {
 		// collections
 		if (info.isCollection()) {
-			List<AvroType> elements = new ArrayList<AvroType>();
+			List<AvroType> elements = new ArrayList<>();
 
 			// for every type in the collection
 			for (CTypeInfo typeInfo : info.ref()) {
@@ -138,13 +139,10 @@ public class SchemagenHelper {
 			}
 
 			returnType = new AvroUnion(AvroPrimitive.PrimitiveType.NULL.newInstance(), returnType);
-			if (defaultValue == null) { defaultValue = AvroPrimitive.PrimitiveType.NULL.defaultValue; }
+			//if (defaultValue == null) { defaultValue = AvroPrimitive.PrimitiveType.NULL.defaultValue; }
 		}
 
-		if (defaultValue != null) {
-			returnType.setDefaultValue(defaultValue);
-		}
-
+		returnType.setDefaultValue(defaultValue);
 		return returnType;
 	}
 
@@ -272,6 +270,11 @@ public class SchemagenHelper {
 			return AvroPrimitive.PrimitiveType.STRING.newInstance();
 		}
 
+		// TODO
+		if (clazz.isAssignableFrom(clazz.owner().ref(BigDecimal.class))) {
+			return AvroPrimitive.PrimitiveType.STRING.newInstance();
+		}
+
 		return null;
 	}
 
@@ -326,7 +329,7 @@ public class SchemagenHelper {
 		if (front.trim().isEmpty())
 			return "avro";
 		else
-			return front + ".avro";
+			return front;
 	}
 
 	/// ----------------- simple assertion handling ------------------------ //
