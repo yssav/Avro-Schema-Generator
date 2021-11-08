@@ -1,0 +1,20 @@
+### IntelliJ IDEA ###
+.idea/
+out/
+*.iws
+*.iml
+*.ipr
+/src/main/java/META-INF
+/output
+
+# Eclipse
+.settings/
+.classpath
+.project
+
+# Maven
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/
+target/
+/mvnw
+/mvnw.cmd
