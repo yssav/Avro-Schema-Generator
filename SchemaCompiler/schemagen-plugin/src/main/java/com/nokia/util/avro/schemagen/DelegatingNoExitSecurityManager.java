@@ -196,32 +196,9 @@ public class DelegatingNoExitSecurityManager extends SecurityManager {
 	}
 
 	@Override
-	public boolean checkTopLevelWindow(Object window) {
-		if (delegate != null) {
-			return delegate.checkTopLevelWindow(window);
-		} else {
-			return super.checkTopLevelWindow(window);
-		}
-	}
-
-	@Override
 	public void checkPrintJobAccess() {
 		if (delegate != null) {
 			delegate.checkPrintJobAccess();
-		}
-	}
-
-	@Override
-	public void checkSystemClipboardAccess() {
-		if (delegate != null) {
-			delegate.checkSystemClipboardAccess();
-		}
-	}
-
-	@Override
-	public void checkAwtEventQueueAccess() {
-		if (delegate != null) {
-			delegate.checkAwtEventQueueAccess();
 		}
 	}
 
@@ -243,13 +220,6 @@ public class DelegatingNoExitSecurityManager extends SecurityManager {
 	public void checkSetFactory() {
 		if (delegate != null) {
 			delegate.checkSetFactory();
-		}
-	}
-
-	@Override
-	public void checkMemberAccess(Class<?> clazz, int which) {
-		if (delegate != null) {
-			delegate.checkMemberAccess(clazz, which);
 		}
 	}
 
